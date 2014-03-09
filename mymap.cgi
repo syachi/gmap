@@ -7,7 +7,6 @@ use Encode;
 use JSON;
 use LWP::UserAgent;
 use Lingua::JA::Regular::Unicode qw/alnum_z2h/;
-use Data::Dumper;
 
 ## 初期変数 ##
 my $API_URL      = "http://maps.google.com/maps/api/geocode/json";
@@ -120,6 +119,3 @@ __DATA__
 北海道札幌市北区北25条西5丁目2−8
 北海道札幌市北区北22条西5丁目2−32
 北海道札幌市手稲区西宮の沢5条1丁目14−10
-
-@@ hoge.dat
-北海道札幌市白石区菊水元町7条1丁目10－21

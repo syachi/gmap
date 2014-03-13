@@ -17,45 +17,56 @@ my $ua = LWP::UserAgent->new();
 ## 処理部分 ##
 # 住所から緯度経度を取得する
 my @locdata = split(/\x0D\x0A|\x0D|\x0A/, get_data_section('shop.dat'));
-my @coord;
-foreach my $addr (@locdata){
-    my $h = getCoordinates($addr);
-    die("error") if (not $h);
-    $h->{"title"} =~ s/日本,\s+//msx;
-    push(@coord, $h);
-}
+my @coords = getLocations(@locdata);
 
 # HTMLの生成
-my $values = {
-    initiallat => $init->{"lat"},
-    initiallng => $init->{"lng"},
-    COORD_ARRAY => JSON::encode_json(\@coord)
-};
 my $html = get_data_section('index.html');
-
 my $tt = Template->new();
 print "Content-type: text/html".$/.$/;
-print $tt->process(\$html, $values);
+print $tt->process(\$html, {
+    initiallat => $init->{"lat"},
+    initiallng => $init->{"lng"},
+    COORD_ARRAY => JSON::encode_json(\@coords)
+});
+
 exit;
 
-## 関数 ##
+
+
+## @method getLocations
+# 住所文字列リストからLat/Lngを取得し、リストを返却
+# @param addresses [@] 住所文字列リスト
+# @return [@] Location配列 hashref
+sub getLocations {
+    my @result;
+    foreach (@_) {
+        my $coords = getCoordinates($_);
+        next if (not $coords);
+        $coords->{"title"} =~ s/日本,\s+//msx;
+        push(@result, getCoordinates($_));
+    }
+    return @result;
+}
+
 sub getCoordinates {
-    my $adrs = $_[0];
+    my $adrs = shift;
     $adrs =~ s/[\－─ー－−]/\-/msxgo;  # ハイフンを統一
-    $adrs = uri_escape_utf8($adrs);
-    my $res = $ua->get($map->{"apiurl"}."?".$map->{"apiopt"}."&address=".$adrs);    # Google mapsにアクセス
+    my $res = $ua->get(createUrl($map->{"apiurl"}, $map->{"apiopt"}, $adrs));
     # エラー処理
-    return undef unless ($res->is_success);
+    return undef if (not $res->is_success);
     $res = decode_json($res->content);
-    return undef unless ($res->{status} eq 'OK');
+    return undef if ($res->{status} ne 'OK');
     my $results = $res->{results};
-    return undef if(ref($results) ne 'ARRAY' or @$results != 1);
-    # 値を返す
+    return undef if (ref($results) ne 'ARRAY' or @$results != 1);
     return {
         title => $results->[0]->{formatted_address}, # 整形後の住所文字列
         lat => $results->[0]->{geometry}->{location}->{lat}, #緯度
         lng => $results->[0]->{geometry}->{location}->{lng}  #軽度
     };
+}
+
+sub createUrl {
+    return $_[0]."?".$_[1]."&address=".uri_escape_utf8($_[2]);
 }
 
 ## データ部分 ##

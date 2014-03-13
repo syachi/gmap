@@ -1,4 +1,4 @@
-#!/usr/local/bin/perl
+#!/usr/bin/env perl
 use strict;
 use warnings;
 use utf8;
@@ -81,6 +81,7 @@ __DATA__
 	<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
 	<script type="text/javascript" src="http://maps.google.com/maps/api/js?sensor=true"></script>
 	<script type="text/javascript">
+        window.onload = function () { initialize(); };
 		function initialize() {
 			var mapcenter = new google.maps.LatLng( %%CENTER_LAT%% , %%CENTER_LNG%% );
 			var myOptions = {
@@ -106,7 +107,7 @@ __DATA__
 		#map {width: 100%; height: 100%;}
 	</style>
 </head>
-<body onload="initialize()">
+<body>
 	<div id="map"></div>
 </body>
 </html>

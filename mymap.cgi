@@ -15,8 +15,9 @@ my ($map, $init) = ($cfg->{"config.json"}{"map"}, $cfg->{"config.json"}{"initial
 my $ua = LWP::UserAgent->new();
 
 ## 処理部分 ##
-# 住所から緯度経度を取得する
+# 住所データ取得
 my @locdata = split(/\x0D\x0A|\x0D|\x0A/, get_data_section('shop.dat'));
+# 住所から緯度経度を取得する
 my @coords = getLocations(@locdata);
 
 # HTMLの生成
@@ -43,7 +44,7 @@ sub getLocations {
         my $coords = getCoordinates($_);
         next if (not $coords);
         $coords->{"title"} =~ s/日本,\s+//msx;
-        push(@result, getCoordinates($_));
+        push(@result, $coords);
     }
     return @result;
 }

@@ -1,39 +1,39 @@
 #!/usr/bin/env perl
+
 use strict;
 use warnings;
 use utf8;
 use Data::Section::Simple qw(get_data_section);
-use Encode;
 use JSON;
 use LWP::UserAgent;
-use Lingua::JA::Regular::Unicode qw/alnum_z2h/;
 use Config::Any;
 use Template;
+use URI::Escape;
 
 my $cfg = Config::Any->load_stems({stems => ["config"], use_ext => 1, flatten_to_hash => 1});
-my($map, $init) = ($cfg->{"config.json"}{"map"}, $cfg->{"config.json"}{"initial"});
-my $tt = Template->new() or die($Template::ERROR);
+my ($map, $init) = ($cfg->{"config.json"}{"map"}, $cfg->{"config.json"}{"initial"});
+my $ua = LWP::UserAgent->new();
 
 ## 処理部分 ##
 # 住所から緯度経度を取得する
 my @locdata = split(/\x0D\x0A|\x0D|\x0A/, get_data_section('shop.dat'));
 my @coord;
 foreach my $addr (@locdata){
-    my ($formattedAddr, $lat, $lng) = getCoordinates($addr);
-    die("Fatal") if (not defined($formattedAddr));
-    $formattedAddr =~ s/日本,\s//msxg;
-    push(@coord, "{lat:\"$lat\", lng:\"$lng\", title:\"$formattedAddr\"}");
+    my $h = getCoordinates($addr);
+    die("error") if (not $h);
+    $h->{"title"} =~ s/日本,\s+//msx;
+    push(@coord, $h);
 }
-my $posArray = join(",", @coord);
 
 # HTMLの生成
 my $values = {
     initiallat => $init->{"lat"},
     initiallng => $init->{"lng"},
-    COORD_ARRAY => $posArray
+    COORD_ARRAY => JSON::encode_json(\@coord)
 };
 my $html = get_data_section('index.html');
 
+my $tt = Template->new();
 print "Content-type: text/html".$/.$/;
 print $tt->process(\$html, $values);
 exit;
@@ -41,28 +41,21 @@ exit;
 ## 関数 ##
 sub getCoordinates {
     my $adrs = $_[0];
-    $adrs =~ s/[\－─ー－−]/\-/go;  # ハイフンを統一
-    $adrs =~ s/(\W)/'%' . unpack('H2', $1)/ego; # URLエンコード
-    my $ua = LWP::UserAgent->new();
+    $adrs =~ s/[\－─ー－−]/\-/msxgo;  # ハイフンを統一
+    $adrs = uri_escape_utf8($adrs);
     my $res = $ua->get($map->{"apiurl"}."?".$map->{"apiopt"}."&address=".$adrs);    # Google mapsにアクセス
     # エラー処理
-    unless($res->is_success){
-        return undef;
-    }
+    return undef unless ($res->is_success);
     $res = decode_json($res->content);
-    unless ($res->{status} eq 'OK') {
-        return undef;
-    }
+    return undef unless ($res->{status} eq 'OK');
     my $results = $res->{results};
-    if(ref($results) ne 'ARRAY' or @$results != 1) {
-        return undef;
-    }
+    return undef if(ref($results) ne 'ARRAY' or @$results != 1);
     # 値を返す
-    return (
-        $results->[0]->{formatted_address}, # 整形後の住所文字列
-        $results->[0]->{geometry}->{location}->{lat}, #緯度
-        $results->[0]->{geometry}->{location}->{lng}  #軽度
-    );
+    return {
+        title => $results->[0]->{formatted_address}, # 整形後の住所文字列
+        lat => $results->[0]->{geometry}->{location}->{lat}, #緯度
+        lng => $results->[0]->{geometry}->{location}->{lng}  #軽度
+    };
 }
 
 ## データ部分 ##
@@ -78,16 +71,14 @@ __DATA__
     <script type="text/javascript">
         window.onload = function () { initialize(); };
         function initialize() {
-            var mapcenter = new google.maps.LatLng( [% initiallat %], [% initiallng %] );
+            var mapcenter = new google.maps.LatLng([% initiallat %], [% initiallng %]);
             var myOptions = {
                 zoom: 12,
                 center: mapcenter,
                 mapTypeId: google.maps.MapTypeId.ROADMAP
             };
             var map = new google.maps.Map(document.getElementById("map"), myOptions);
-            var markerData = [
-                [% COORD_ARRAY %]
-            ];
+            var markerData = [% COORD_ARRAY %]
             for (i = 0; i < markerData.length; i++){
                 var marker = new google.maps.Marker({
                     position: new google.maps.LatLng(markerData[i].lat, markerData[i].lng),

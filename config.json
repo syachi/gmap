@@ -1,0 +1,11 @@
+{
+    "map": {
+        "apiurl": "http://maps.google.com/maps/api/geocode/json",
+        "apiopt": "sensor=false&region=jp&language=ja"
+    },
+    "initial": {
+        "lat": 43.0631485,
+        "lng": 141.3540735
+    }
+}
+

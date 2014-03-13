@@ -7,12 +7,10 @@ use Encode;
 use JSON;
 use LWP::UserAgent;
 use Lingua::JA::Regular::Unicode qw/alnum_z2h/;
+use Config::Any;
 
-## 初期変数 ##
-my $API_URL      = "http://maps.google.com/maps/api/geocode/json";
-my $API_OPT      = "sensor=false&region=jp&language=ja";
-my $TOKEIDAI_LAT =  43.0631485;
-my $TOKEIDAI_LNG = 141.3540735;	# 札幌時計台の座標（地図の中心とする）
+my $cfg = Config::Any->load_stems({stems => ["config"], use_ext => 1, flatten_to_hash => 1});
+my($map, $init) = ($cfg->{"config.json"}{"map"}, $cfg->{"config.json"}{"initial"});
 
 ## 処理部分 ##
 # 住所から緯度経度を取得する
@@ -31,8 +29,8 @@ my $posArray = join ",", @coord;
 
 # HTMLの生成
 my %contain = (
-	"%%CENTER_LAT%%",  $TOKEIDAI_LAT,
-	"%%CENTER_LNG%%",  $TOKEIDAI_LNG,
+	"%%CENTER_LAT%%",  $init->{"lat"},
+	"%%CENTER_LNG%%",  $init->{"lng"},
 	"%%COORD_ARRAY%%", $posArray
 );
 my $html = get_data_section('index.html');
@@ -49,7 +47,7 @@ sub getCoordinates {
 	$adrs =~ s/[\－─ー－−]/\-/go;	# ハイフンを統一
 	$adrs =~ s/(\W)/'%' . unpack('H2', $1)/ego; # URLエンコード
 	my $ua = LWP::UserAgent->new();
-	my $res = $ua->get("$API_URL?$API_OPT&address=$adrs");	# Google mapsにアクセス
+	my $res = $ua->get($map->{"apiurl"}."?".$map->{"apiopt"}."&address=".$adrs);	# Google mapsにアクセス
 	# エラー処理
 	unless($res->is_success){
 		return undef;

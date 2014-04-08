@@ -1,0 +1,2 @@
+#!/bin/sh
+./mymap.pl daemon -l http://*:$PORT -m production

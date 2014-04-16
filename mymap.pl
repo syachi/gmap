@@ -17,16 +17,16 @@ helper db => sub { $dbh };
 # レコードを登録する
 helper insert => sub {
   my $self = shift;
-  my ($address) = @_;
-  my $sth = $self->db->prepare('INSERT INTO places (address) VALUES (?)') || return undef;
-  $sth->execute($address) || return undef;
+  my ($name, $address, $memo) = @_;
+  my $sth = $self->db->prepare('INSERT INTO places (name, address, memo) VALUES (?, ?, ?)') || return undef;
+  $sth->execute($name, $address, $memo) || return undef;
   return 1;
 };
 
 # 登録されているデータを返す
 helper select => sub {
   my $self = shift;
-  my $sth = $self->db->prepare('SELECT address FROM places') || return undef;
+  my $sth = $self->db->prepare('SELECT name, address, memo FROM places') || return undef;
   $sth->execute() || return undef;
   return $sth->fetchall_arrayref(+{});
 };
@@ -35,15 +35,15 @@ helper select => sub {
 helper create_table => sub {
   my $self = shift;
   warn "CREATE TABLE";
-  $self->db->do('CREATE TABLE places (id serial primary key, address text)') || return undef;
+  $self->db->do('CREATE TABLE places (id serial primary key NOT NULL, name text NOT NULL, address text NOT NULL, memo text NOT NULL)') || return undef;
   # 初期データ
-  $self->insert('北海道札幌市白石区菊水元町7条1丁目10−21');
-  $self->insert('北海道札幌市北区北18条西5丁目2−1');
-  $self->insert('北海道札幌市西区発寒3条6−1−3');
-  $self->insert('北海道札幌市北区北37条西4丁目2−6');
-  $self->insert('北海道札幌市北区北25条西5丁目2−8');
-  $self->insert('北海道札幌市北区北22条西5丁目2−32');
-  $self->insert('北海道札幌市手稲区西宮の沢5条1丁目14−10');
+  $self->insert('', '北海道札幌市白石区菊水元町7条1丁目10−21', '');
+  $self->insert('', '北海道札幌市北区北18条西5丁目2−1'       , '');
+  $self->insert('', '北海道札幌市西区発寒3条6−1−3'           , '');
+  $self->insert('', '北海道札幌市北区北37条西4丁目2−6'       , '');
+  $self->insert('', '北海道札幌市北区北25条西5丁目2−8'       , '');
+  $self->insert('', '北海道札幌市北区北22条西5丁目2−32'      , '');
+  $self->insert('', '北海道札幌市手稲区西宮の沢5条1丁目14−10', '');
   return 1;
 };
 
@@ -82,8 +82,12 @@ __DATA__
           center: mapcenter,
           mapTypeId: google.maps.MapTypeId.ROADMAP
         },
-        addresses = [],
-        map = new google.maps.Map($("#map").get(0), myOptions);
+        map = new google.maps.Map($("#map").get(0), myOptions),
+        infowindow = new google.maps.InfoWindow(),
+        escape = function(val) {
+          return $('<div />').text(val).html();
+        };
+
       $.ajax({
         type: 'GET',
         url: 'api/v1/addresses',
@@ -95,6 +99,11 @@ __DATA__
               var marker = new google.maps.Marker({
                 map: map,
                 position: results[0].geometry.location
+              });
+              google.maps.event.addListener(marker, 'click', function(event) {
+                var contents = [escape(row.name), escape(row.address), escape(row.memo)];
+                infowindow.setContent(contents.filter(function(v) { return v != ''; }).join("<br>"));
+                infowindow.open(map, marker);
               });
             });
           });

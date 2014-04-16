@@ -1,6 +1,54 @@
 #!/usr/bin/env perl
 
 use Mojolicious::Lite;
+use DBI;
+
+# herokuを利用する場合は$ENV{DATABASE_URL}に接続情報がある
+$ENV{DATABASE_URL} ||= "postgres://syachi:passwd@/tmp:5432/gmap"; # 未定義の場合はローカルに接続
+$ENV{DATABASE_URL} =~ m#\Apostgres://(\S+?):(\S+?)@(\S+?):(\d+)/(\S+?)\z#ms;
+my ($user, $pass, $host, $port, $db) = ($1, $2, $3, $4, $5);
+
+# データベースに接続する
+my $dbh = DBI->connect("dbi:Pg:host=$host;dbname=$db", $user, $pass, {PrintError => 0}) || die "Could not connect";
+
+# データベースのハンドラを返す
+helper db => sub { $dbh };
+
+# レコードを登録する
+helper insert => sub {
+  my $self = shift;
+  my ($address) = @_;
+  my $sth = $self->db->prepare('INSERT INTO places (address) VALUES (?)') || return undef;
+  $sth->execute($address) || return undef;
+  return 1;
+};
+
+# 登録されているデータを返す
+helper select => sub {
+  my $self = shift;
+  my $sth = $self->db->prepare('SELECT address FROM places') || return undef;
+  $sth->execute() || return undef;
+  return $sth->fetchall_arrayref(+{});
+};
+
+# テーブルを作成して初期データを登録する
+helper create_table => sub {
+  my $self = shift;
+  warn "CREATE TABLE";
+  $self->db->do('CREATE TABLE places (id serial primary key, address text)') || return undef;
+  # 初期データ
+  $self->insert('北海道札幌市白石区菊水元町7条1丁目10−21');
+  $self->insert('北海道札幌市北区北18条西5丁目2−1');
+  $self->insert('北海道札幌市西区発寒3条6−1−3');
+  $self->insert('北海道札幌市北区北37条西4丁目2−6');
+  $self->insert('北海道札幌市北区北25条西5丁目2−8');
+  $self->insert('北海道札幌市北区北22条西5丁目2−32');
+  $self->insert('北海道札幌市手稲区西宮の沢5条1丁目14−10');
+  return 1;
+};
+
+# SELECTに失敗した場合はテーブルを作成する
+app->select || app->create_table;
 
 get '/' => sub {
   my $self = shift;
@@ -9,16 +57,7 @@ get '/' => sub {
 
 get '/api/v1/addresses' => sub {
   my $self = shift;
-  my $data = [
-    {address => '北海道札幌市白石区菊水元町7条1丁目10−21'},
-    {address => '北海道札幌市北区北18条西5丁目2−1'},
-    {address => '北海道札幌市西区発寒3条6−1−3'},
-    {address => '北海道札幌市北区北37条西4丁目2−6'},
-    {address => '北海道札幌市北区北25条西5丁目2−8'},
-    {address => '北海道札幌市北区北22条西5丁目2−32'},
-    {address => '北海道札幌市手稲区西宮の沢5条1丁目14−10'},
-  ];
-  $self->render(json => $data);
+  $self->render(json => $self->select);
 };
 
 app->start;

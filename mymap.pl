@@ -60,6 +60,13 @@ get '/api/v1/addresses' => sub {
   $self->render(json => $self->select);
 };
 
+post '/api/v1/addresses' => sub {
+  my $self = shift;
+  my $data = $self->req->json;
+  my $ret = $self->insert($data->{name}, $data->{address}, $data->{memo});
+  $self->render(json => {status => $ret});
+};
+
 app->start;
 
 __DATA__

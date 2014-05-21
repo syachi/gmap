@@ -2,53 +2,73 @@
 
 use Mojolicious::Lite;
 use DBI;
+use Teng;
+use Teng::Schema::Loader;
 
 # herokuを利用する場合は$ENV{DATABASE_URL}に接続情報がある
 $ENV{DATABASE_URL} ||= "postgres://syachi:passwd@/tmp:5432/gmap"; # 未定義の場合はローカルに接続
 $ENV{DATABASE_URL} =~ m#\Apostgres://(\S+?):(\S+?)@(\S+?):(\d+)/(\S+?)\z#ms;
 my ($user, $pass, $host, $port, $db) = ($1, $2, $3, $4, $5);
 
-# データベースに接続する
-my $dbh = DBI->connect("dbi:Pg:host=$host;dbname=$db", $user, $pass, {PrintError => 0}) || die "Could not connect";
+# DBIのハンドラを返す
+my $dbh = DBI->connect(
+  "dbi:Pg:host=$host;dbname=$db", $user, $pass,
+  {PrintError => 0}
+) || die "Could not connect";
+helper dbh => sub { $dbh };
 
-# データベースのハンドラを返す
-helper db => sub { $dbh };
+# Tengのハンドラを返す
+my $teng = undef;
+helper teng => sub { $teng };
 
-# レコードを登録する
-helper insert => sub {
+# 初期化
+helper init => sub {
   my $self = shift;
-  my ($name, $address, $memo) = @_;
-  my $sth = $self->db->prepare('INSERT INTO places (name, address, memo) VALUES (?, ?, ?)') || return undef;
-  $sth->execute($name, $address, $memo) || return undef;
-  return 1;
-};
-
-# 登録されているデータを返す
-helper select => sub {
-  my $self = shift;
-  my $sth = $self->db->prepare('SELECT name, address, memo FROM places') || return undef;
-  $sth->execute() || return undef;
-  return $sth->fetchall_arrayref(+{});
+  # テーブルの情報を読み込む
+  $teng = Teng::Schema::Loader->load(
+    dbh => $self->dbh,
+    namespace => 'MyApp::DB'
+  );
 };
 
 # テーブルを作成して初期データを登録する
-helper create_table => sub {
+helper setup => sub {
   my $self = shift;
-  warn "CREATE TABLE";
-  $self->db->do('CREATE TABLE places (id serial primary key NOT NULL, name text NOT NULL, address text NOT NULL, memo text NOT NULL)') || return undef;
-  # 初期データ
-  $self->insert('', '北海道札幌市白石区菊水元町7条1丁目10−21', '');
-  $self->insert('', '北海道札幌市北区北18条西5丁目2−1'       , '');
-  $self->insert('', '北海道札幌市西区発寒3条6−1−3'           , '');
-  $self->insert('', '北海道札幌市北区北37条西4丁目2−6'       , '');
-  $self->insert('', '北海道札幌市北区北25条西5丁目2−8'       , '');
-  $self->insert('', '北海道札幌市北区北22条西5丁目2−32'      , '');
-  $self->insert('', '北海道札幌市手稲区西宮の沢5条1丁目14−10', '');
+
+  # テーブルの情報を読み込む
+  $self->init;
+
+  # テーブルが存在していれば抜ける
+  return 1 if defined $self->teng->schema->get_table('places');
+
+  # テーブルが無い場合は作成する
+  eval {
+    $self->teng->do(q{
+      CREATE TABLE places (
+        id SERIAL PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        address TEXT NOT NULL,
+        memo TEXT NOT NULL
+      );
+    });
+  } || return undef;
+
+  # テーブルを作成したので読み込み直す
+  $self->init();
+
+  # 初期データを登録する
+  $self->teng->bulk_insert('places', [
+    {name => '', address => '北海道札幌市白石区菊水元町7条1丁目10−21', memo => '',},
+    {name => '', address => '北海道札幌市北区北18条西5丁目2−1'       , memo => '',},
+    {name => '', address => '北海道札幌市西区発寒3条6−1−3'           , memo => '',},
+    {name => '', address => '北海道札幌市北区北37条西4丁目2−6'       , memo => '',},
+    {name => '', address => '北海道札幌市北区北25条西5丁目2−8'       , memo => '',},
+    {name => '', address => '北海道札幌市北区北22条西5丁目2−32'      , memo => '',},
+    {name => '', address => '北海道札幌市手稲区西宮の沢5条1丁目14−10', memo => '',},
+  ]);
+
   return 1;
 };
-
-# SELECTに失敗した場合はテーブルを作成する
-app->select || app->create_table;
 
 get '/' => sub {
   my $self = shift;
@@ -57,16 +77,26 @@ get '/' => sub {
 
 get '/api/v1/addresses' => sub {
   my $self = shift;
-  $self->render(json => $self->select);
+  my @ret = ();
+  foreach my $row ($self->teng->search('places')) {
+    push @ret, {
+      name    => $row->name,
+      address => $row->address,
+      memo    => $row->memo
+    };
+  }
+  $self->render(json => \@ret);
 };
 
 post '/api/v1/addresses' => sub {
   my $self = shift;
-  my $data = $self->req->json;
-  my $ret = $self->insert($data->{name}, $data->{address}, $data->{memo});
-  $self->render(json => {status => $ret});
+  my $id = eval {
+    $self->teng->fast_insert('places', $self->req->json);
+  } || return undef;
+  $self->render(json => {status => $id});
 };
 
+app->setup;
 app->start;
 
 __DATA__
